@@ -22,6 +22,7 @@ jobs:
           patch_pattern: '^fix|^perf|^refactor|^chore|^docs'
           prerelease: false
           create_tag: true
+          fallbackTag: v1.0.0
       - name: Skip if no new version
         if: ${{ steps.semver.outputs.new_release_published != 'true' }}
         run: echo "No new version"; exit 0
