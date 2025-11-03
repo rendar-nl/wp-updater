@@ -28,7 +28,7 @@ jobs:
             echo "initial=false" >> $GITHUB_OUTPUT
           fi
 
-      # Compute next version (uses only v1-valid inputs)
+      # Compute next version (v1 inputs only)
       - name: Compute next version
         if: steps.bootstrap.outputs.initial != 'true'
         id: semver
@@ -40,35 +40,35 @@ jobs:
           majorList: 'feat!,BREAKING CHANGE'
           minorList: 'feat'
           patchList: 'fix,perf,refactor,chore,docs'
-          # no create_tag, no fallbackTag on v1
-
-      # Decide version and create tag if needed
+      
+      # Decide version and create tag from official outputs
       - name: Determine version and create tag
         id: pkgver
         shell: bash
         run: |
-          # If we just bootstrapped, publish 1.0.0 and stop
           if [ "${{ steps.bootstrap.outputs.initial }}" = "true" ]; then
             echo "ver=1.0.0" >> "$GITHUB_OUTPUT"
+            echo "tag=v1.0.0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
       
-          # semver-action@v1: 'incremented' is 'true' when a bump is detected
-          if [ "${{ steps.semver.outputs.incremented }}" != "true" ]; then
-            echo "No version bump (commit messages didn't match rules)."
+          bump="${{ steps.semver.outputs.bump }}"          # major | minor | patch | none
+          if [ -z "$bump" ] || [ "$bump" = "none" ]; then
+            echo "No version bump from semver-action."
             exit 0
           fi
       
-          ver="${{ steps.semver.outputs.version }}"          # e.g. 1.0.1
-          tag="${{ steps.semver.outputs.version_tag }}"      # e.g. v1.0.1
+          ver="${{ steps.semver.outputs.nextStrict }}"     # e.g. 1.2.0  (no 'v')
+          tag="${{ steps.semver.outputs.next }}"           # e.g. v1.2.0
       
-          # Create tag ourselves
           git config user.email "actions@github.com"
           git config user.name "github-actions"
           git tag -a "$tag" -m "Release $tag"
           git push origin "$tag"
       
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
 
 
       - name: Zip source
