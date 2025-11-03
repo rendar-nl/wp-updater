@@ -52,14 +52,14 @@ jobs:
             exit 0
           fi
       
-          bump="${{ steps.semver.outputs.bump }}"          # major | minor | patch | none
+          bump="${{ steps.semver.outputs.bump }}"   # major | minor | patch | none
           if [ -z "$bump" ] || [ "$bump" = "none" ]; then
-            echo "No version bump from semver-action."
+            echo "No version bump."
             exit 0
           fi
       
-          ver="${{ steps.semver.outputs.nextStrict }}"     # e.g. 1.2.0  (no 'v')
-          tag="${{ steps.semver.outputs.next }}"           # e.g. v1.2.0
+          ver="${{ steps.semver.outputs.nextStrict }}"   # 1.0.1  (NO 'v')
+          tag="v${ver}"                                  # build the tag ONCE here
       
           git config user.email "actions@github.com"
           git config user.name "github-actions"
@@ -68,9 +68,7 @@ jobs:
       
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-
-
+      
       - name: Zip source
         if: steps.pkgver.outputs.ver != ''
         run: |
@@ -82,7 +80,7 @@ jobs:
         if: steps.pkgver.outputs.ver != ''
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.pkgver.outputs.ver }}
-          name: v${{ steps.pkgver.outputs.ver }}
+          tag_name: ${{ steps.pkgver.outputs.ver }}
+          name: ${{ steps.pkgver.outputs.ver }}
           files: dist/*.zip
           generate_release_notes: true
