@@ -28,8 +28,8 @@ jobs:
             echo "initial=false" >> $GITHUB_OUTPUT
           fi
 
-      # Only run semver when we’re past the bootstrap tag
-      - name: Compute version
+      # Compute next version (uses only v1-valid inputs)
+      - name: Compute next version
         if: steps.bootstrap.outputs.initial != 'true'
         id: semver
         uses: ietf-tools/semver-action@v1
@@ -40,27 +40,47 @@ jobs:
           majorList: 'feat!,BREAKING CHANGE'
           minorList: 'feat'
           patchList: 'fix,perf,refactor,chore,docs'
-          fallbackTag: v1.0.0
-          create_tag: true
+          # no create_tag, no fallbackTag on v1
 
+      # Decide version and create tag if needed
       - name: Determine version for packaging
         id: pkgver
         run: |
           if [ "${{ steps.bootstrap.outputs.initial }}" = "true" ]; then
             echo "ver=1.0.0" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.semver.outputs.new_release_published }}" = "true" ]; then
-            echo "ver=${{ steps.semver.outputs.release_version }}" >> $GITHUB_OUTPUT
-          else
+            exit 0
+          fi
+
+          # semver-action@v1 exposes 'version' (without 'v') and 'version_tag' (with 'v')
+          next="${{ steps.semver.outputs.version }}"
+          next_tag="${{ steps.semver.outputs.version_tag }}"
+          curr="$(git describe --tags --abbrev=0 2>/dev/null || echo '')"
+
+          if [ -z "$next" ]; then
+            echo "No new version from semver."; exit 0
+          fi
+
+          if [ "$curr" = "$next_tag" ]; then
             echo "No new version to publish"; exit 0
           fi
 
+          # Create the new tag ourselves
+          git config user.email "actions@github.com"
+          git config user.name "github-actions"
+          git tag -a "v$next" -m "Release v$next"
+          git push origin "v$next"
+
+          echo "ver=$next" >> $GITHUB_OUTPUT
+
       - name: Zip source
+        if: steps.pkgver.outputs.ver != ''
         run: |
           ver="${{ steps.pkgver.outputs.ver }}"
           mkdir -p dist
           zip -r "dist/rendar-wp-updater-${ver}.zip" . -x '.git/*' '.github/*' 'tests/*'
 
       - name: Create GitHub Release
+        if: steps.pkgver.outputs.ver != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.pkgver.outputs.ver }}
