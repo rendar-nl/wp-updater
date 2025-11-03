@@ -1,0 +1,52 @@
+name: Pre-release (non-main) with semver-action
+on:
+  push:
+    branches-ignore: [ main ]
+
+jobs:
+  prerelease:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Set PREID from branch
+        id: preid
+        run: |
+          b="${GITHUB_REF_NAME}"
+          b="${b//[^a-zA-Z0-9.-]/-}"
+          echo "preid=${b}" >> $GITHUB_OUTPUT
+      - name: Compute prerelease version
+        id: semver
+        uses: ietf-tools/semver-action@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+          tag_prefix: v
+          major_pattern: '^feat!|BREAKING CHANGE'
+          minor_pattern: '^feat'
+          patch_pattern: '^fix|^perf|^refactor|^chore|^docs'
+          prerelease: true
+          prerelease_identifier: ${{ steps.preid.outputs.preid }}
+          create_tag: true
+      - name: Delete previous prerelease (same tag) if exists
+        continue-on-error: true
+        run: |
+          tag="v${{ steps.semver.outputs.release_version }}"
+          gh release delete "$tag" -y || true
+          git push origin :refs/tags/"$tag" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Zip source
+        run: |
+          ver="${{ steps.semver.outputs.release_version }}"
+          mkdir -p dist
+          zip -r "dist/rendar-wp-updater-${ver}.zip" . -x '.git/*' '.github/*' 'tests/*'
+      - name: Create prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          tag_name: v${{ steps.semver.outputs.release_version }}
+          name: v${{ steps.semver.outputs.release_version }}
+          files: dist/*.zip
+          generate_release_notes: true
