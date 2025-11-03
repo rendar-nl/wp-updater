@@ -1,0 +1,39 @@
+name: Release (main) with semver-action
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Compute version
+        id: semver
+        uses: ietf-tools/semver-action@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+          tag_prefix: v
+          major_pattern: '^feat!|BREAKING CHANGE'
+          minor_pattern: '^feat'
+          patch_pattern: '^fix|^perf|^refactor|^chore|^docs'
+          prerelease: false
+          create_tag: true
+      - name: Skip if no new version
+        if: ${{ steps.semver.outputs.new_release_published != 'true' }}
+        run: echo "No new version"; exit 0
+      - name: Zip source
+        run: |
+          ver="${{ steps.semver.outputs.release_version }}"
+          mkdir -p dist
+          zip -r "dist/rendar-wp-updater-${ver}.zip" . -x '.git/*' '.github/*' 'tests/*'
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.semver.outputs.release_version }}
+          name: v${{ steps.semver.outputs.release_version }}
+          files: dist/*.zip
+          generate_release_notes: true
