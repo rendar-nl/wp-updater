@@ -1,4 +1,4 @@
-name: Release (main) with semver-action
+name: Release (main) with semver-action v1
 
 on:
   push:
@@ -12,8 +12,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
 
       # Create v1.0.0 if repo has no tags yet
       - name: Bootstrap initial tag if none
@@ -29,30 +28,30 @@ jobs:
             echo "initial=false" >> $GITHUB_OUTPUT
           fi
 
+      # Only run semver when we’re past the bootstrap tag
       - name: Compute version
+        if: steps.bootstrap.outputs.initial != 'true'
         id: semver
         uses: ietf-tools/semver-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: main
-          tag_prefix: v
-          major_pattern: '^feat!|BREAKING CHANGE'
-          minor_pattern: '^feat'
-          patch_pattern: '^fix|^perf|^refactor|^chore|^docs'
-          prerelease: false
-          create_tag: true
+          prefix: v
+          majorList: 'feat!,BREAKING CHANGE'
+          minorList: 'feat'
+          patchList: 'fix,perf,refactor,chore,docs'
           fallbackTag: v1.0.0
+          create_tag: true
 
       - name: Determine version for packaging
         id: pkgver
         run: |
-          if [ "${{ steps.semver.outputs.new_release_published }}" = "true" ]; then
-            echo "ver=${{ steps.semver.outputs.release_version }}" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.bootstrap.outputs.initial }}" = "true" ]; then
+          if [ "${{ steps.bootstrap.outputs.initial }}" = "true" ]; then
             echo "ver=1.0.0" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.semver.outputs.new_release_published }}" = "true" ]; then
+            echo "ver=${{ steps.semver.outputs.release_version }}" >> $GITHUB_OUTPUT
           else
-            echo "No new version to publish"
-            exit 0
+            echo "No new version to publish"; exit 0
           fi
 
       - name: Zip source
