@@ -1,4 +1,5 @@
 name: Release (main) with semver-action
+
 on:
   push:
     branches: [ main ]
@@ -6,10 +7,28 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions: { contents: write }
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+
+      # Create v1.0.0 if repo has no tags yet
+      - name: Bootstrap initial tag if none
+        id: bootstrap
+        run: |
+          if [ -z "$(git tag -l)" ]; then
+            echo "initial=true" >> $GITHUB_OUTPUT
+            git config user.email "actions@github.com"
+            git config user.name "github-actions"
+            git tag -a v1.0.0 -m "Initial tag"
+            git push origin v1.0.0
+          else
+            echo "initial=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Compute version
         id: semver
         uses: ietf-tools/semver-action@v1
@@ -23,18 +42,29 @@ jobs:
           prerelease: false
           create_tag: true
           fallbackTag: v1.0.0
-      - name: Skip if no new version
-        if: ${{ steps.semver.outputs.new_release_published != 'true' }}
-        run: echo "No new version"; exit 0
+
+      - name: Determine version for packaging
+        id: pkgver
+        run: |
+          if [ "${{ steps.semver.outputs.new_release_published }}" = "true" ]; then
+            echo "ver=${{ steps.semver.outputs.release_version }}" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.bootstrap.outputs.initial }}" = "true" ]; then
+            echo "ver=1.0.0" >> $GITHUB_OUTPUT
+          else
+            echo "No new version to publish"
+            exit 0
+          fi
+
       - name: Zip source
         run: |
-          ver="${{ steps.semver.outputs.release_version }}"
+          ver="${{ steps.pkgver.outputs.ver }}"
           mkdir -p dist
           zip -r "dist/rendar-wp-updater-${ver}.zip" . -x '.git/*' '.github/*' 'tests/*'
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.semver.outputs.release_version }}
-          name: v${{ steps.semver.outputs.release_version }}
+          tag_name: v${{ steps.pkgver.outputs.ver }}
+          name: v${{ steps.pkgver.outputs.ver }}
           files: dist/*.zip
           generate_release_notes: true
