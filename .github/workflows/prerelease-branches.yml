@@ -1,4 +1,5 @@
-name: Pre-release (non-main) with semver-action
+name: Pre-release (non-main) – branch prereleases
+
 on:
   push:
     branches-ignore: [ main ]
@@ -6,47 +7,59 @@ on:
 jobs:
   prerelease:
     runs-on: ubuntu-latest
-    permissions: { contents: write }
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: Set PREID from branch
-        id: preid
+
+      # Ensure baseline tag exists on main
+      - name: Bootstrap initial tag if none (on main)
+        id: bootstrap
         run: |
-          b="${GITHUB_REF_NAME}"
-          b="${b//[^a-zA-Z0-9.-]/-}"
-          echo "preid=${b}" >> $GITHUB_OUTPUT
-      - name: Compute prerelease version
-        id: semver
-        uses: ietf-tools/semver-action@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
-          tag_prefix: v
-          major_pattern: '^feat!|BREAKING CHANGE'
-          minor_pattern: '^feat'
-          patch_pattern: '^fix|^perf|^refactor|^chore|^docs'
-          prerelease: true
-          prerelease_identifier: ${{ steps.preid.outputs.preid }}
-          create_tag: true
+          git fetch origin main --depth=1
+          git fetch --tags --force
+          if [ -z "$(git tag -l)" ]; then
+            echo "initial=true" >> $GITHUB_OUTPUT
+            git config user.email "actions@github.com"
+            git config user.name "github-actions"
+            git tag -a v1.0.0 origin/main -m "Initial tag (on main)"
+            git push origin v1.0.0
+          else
+            echo "initial=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare prerelease version
+        id: ver
+        run: |
+          # Base = latest tag (or v1.0.0)
+          base="$(git describe --tags --abbrev=0 2>/dev/null || echo v1.0.0)"
+          base="${base#v}"
+          # Pre-id = sanitized branch name
+          pre="${GITHUB_REF_NAME//[^a-zA-Z0-9.-]/-}"
+          echo "tag=v${base}-${pre}.${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+          echo "ver=${base}-${pre}.${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+
+      # Idempotent: delete same prerelease/tag if it exists
       - name: Delete previous prerelease (same tag) if exists
         continue-on-error: true
         run: |
-          tag="v${{ steps.semver.outputs.release_version }}"
-          gh release delete "$tag" -y || true
-          git push origin :refs/tags/"$tag" || true
+          gh release delete "${{ steps.ver.outputs.tag }}" -y || true
+          git push origin :refs/tags/"${{ steps.ver.outputs.tag }}" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Zip source
         run: |
-          ver="${{ steps.semver.outputs.release_version }}"
           mkdir -p dist
-          zip -r "dist/rendar-wp-updater-${ver}.zip" . -x '.git/*' '.github/*' 'tests/*'
+          zip -r "dist/rendar-wp-updater-${{ steps.ver.outputs.ver }}.zip" . -x '.git/*' '.github/*' 'tests/*'
+
       - name: Create prerelease
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          tag_name: v${{ steps.semver.outputs.release_version }}
-          name: v${{ steps.semver.outputs.release_version }}
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
           files: dist/*.zip
           generate_release_notes: true
