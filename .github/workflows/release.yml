@@ -12,7 +12,7 @@ jobs:
         with: { fetch-depth: 0 }
       - name: Compute version
         id: semver
-        uses: ietf-tools/semver-action@v3
+        uses: ietf-tools/semver-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: main
