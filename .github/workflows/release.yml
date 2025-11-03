@@ -43,34 +43,33 @@ jobs:
           # no create_tag, no fallbackTag on v1
 
       # Decide version and create tag if needed
-      - name: Determine version for packaging
+      - name: Determine version and create tag
         id: pkgver
+        shell: bash
         run: |
+          # If we just bootstrapped, publish 1.0.0 and stop
           if [ "${{ steps.bootstrap.outputs.initial }}" = "true" ]; then
-            echo "ver=1.0.0" >> $GITHUB_OUTPUT
+            echo "ver=1.0.0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          # semver-action@v1 exposes 'version' (without 'v') and 'version_tag' (with 'v')
-          next="${{ steps.semver.outputs.version }}"
-          next_tag="${{ steps.semver.outputs.version_tag }}"
-          curr="$(git describe --tags --abbrev=0 2>/dev/null || echo '')"
-
-          if [ -z "$next" ]; then
-            echo "No new version from semver."; exit 0
+      
+          # semver-action@v1: 'incremented' is 'true' when a bump is detected
+          if [ "${{ steps.semver.outputs.incremented }}" != "true" ]; then
+            echo "No version bump (commit messages didn't match rules)."
+            exit 0
           fi
-
-          if [ "$curr" = "$next_tag" ]; then
-            echo "No new version to publish"; exit 0
-          fi
-
-          # Create the new tag ourselves
+      
+          ver="${{ steps.semver.outputs.version }}"          # e.g. 1.0.1
+          tag="${{ steps.semver.outputs.version_tag }}"      # e.g. v1.0.1
+      
+          # Create tag ourselves
           git config user.email "actions@github.com"
           git config user.name "github-actions"
-          git tag -a "v$next" -m "Release v$next"
-          git push origin "v$next"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+      
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
-          echo "ver=$next" >> $GITHUB_OUTPUT
 
       - name: Zip source
         if: steps.pkgver.outputs.ver != ''
