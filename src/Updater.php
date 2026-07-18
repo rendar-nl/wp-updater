@@ -76,7 +76,7 @@ final class Updater {
         if ( ! $m ) {
             return $r;
         }
-        $i                = is_object( $r ) ? $r = new \stdClass();
+        $i                = new \stdClass();
         $i->name          = (string) ( $m['name'] ?? $this->slug );
         $i->slug          = $this->slug;
         $i->version       = (string) ( $m['version'] ?? '' );
