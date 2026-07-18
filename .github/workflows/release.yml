@@ -61,8 +61,9 @@ jobs:
             exit 0
           fi
       
-          ver="${{ steps.semver.outputs.nextStrict }}"   # v1.0.1
-          tag="${ver}"
+          ver="${{ steps.semver.outputs.nextStrict }}"
+          ver="${ver#v}"
+          tag="v${ver}"
       
           git config user.email "actions@github.com"
           git config user.name "github-actions"
@@ -83,7 +84,7 @@ jobs:
         if: steps.pkgver.outputs.ver != ''
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.pkgver.outputs.ver }}
-          name: ${{ steps.pkgver.outputs.ver }}
+          tag_name: ${{ steps.pkgver.outputs.tag }}
+          name: ${{ steps.pkgver.outputs.tag }}
           files: dist/*.zip
           generate_release_notes: true
